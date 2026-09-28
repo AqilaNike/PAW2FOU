@@ -1,103 +1,198 @@
-require('dotenv').config(); // baris pertama
-
 const express = require("express"); // impor express
-const cors = require('cors'); // impor cors
-
 const app = express(); //instansiasi
-const PORT = process.env.PORT || 3000; //PORT yang akan digunakan
-
-function logger(req, res, next) {
-  const waktu = new Date().toISOString();
-  console.log(`[${waktu}] ${req.method} ${req.url}`);
-  next(); // wajib, agar request lanjut ke handler berikutnya
-}
-
-// Didaftarkan sebelum route agar mencatat seluruh request
-app.use(logger);
-//cors didaftarkan agar bisa diakses dari domain lain (misal: frontend)
-app.use(cors({
-  origin: process.env.CORS_ORIGIN,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-}));
+const PORT = 3000; //PORT yang akan digunakan
 // Middleware agar req.body (JSON) dapat dibaca
 app.use(express.json());
 
 // Data sementara (disimpan di memori, hilang saat server restart)
-let mahasiswa = [
-  { id: 1, nama: "Andi", jurusan: "Sistem Informasi" },
-  { id: 2, nama: "Budi", jurusan: "Informatika" },
+// Topik 18 - Produktivitas: Daftar Tugas
+let tasks = [
+  {
+    id: 1,
+    judul: "Kerjakan Tugas 1 Express",
+    deskripsi: "CRUD + filter",
+    prioritas: "tinggi",
+    tenggat: "2026-10-05",
+    selesai: false,
+  },
+  {
+    id: 2,
+    judul: "Review Materi Dasar Teori REST",
+    deskripsi: "Baca ulang slide pertemuan 3-4",
+    prioritas: "sedang",
+    tenggat: "2026-10-01",
+    selesai: false,
+  },
+  {
+    id: 3,
+    judul: "Push project ke GitHub",
+    deskripsi: "Minimal 5 commit bertahap",
+    prioritas: "tinggi",
+    tenggat: "2026-10-06",
+    selesai: true,
+  },
 ];
-let nextId = 3; // penghitung id untuk data baru
+let nextId = 4; // penghitung id untuk data baru
 
-//route/
+// GET / -> menampilkan info API (identitas & daftar endpoint)
 app.get("/", (req, res) => {
-  res.send("Server Express.js berjalan pada PORT 3000! FOUYIN");
+  res.json({
+    nama: "Aqila Nike Indriani",
+    nim: "2428240130",
+    kelas: "SI5C",
+    topik: "18 - Produktivitas: Daftar Tugas",
+    endpoints: [
+      "GET /tasks",
+      "GET /tasks/:id",
+      "GET /tasks?prioritas=nilai",
+      "POST /tasks",
+      "PUT /tasks/:id",
+      "DELETE /tasks/:id",
+    ],
+  });
 });
 
-// GET /mahasiswa -> menampilkan semua data mahasiswa
-app.get("/mahasiswa", (req, res) => {
-  const { jurusan } = req.query;
+// GET /tasks -> menampilkan semua data, atau hasil filter ?prioritas=...
+app.get("/tasks", (req, res) => {
+  const { prioritas } = req.query;
 
-  if (jurusan) {
-    const hasil = mahasiswa.filter((m) => m.jurusan === jurusan);
-    return res.json(hasil);
+  if (prioritas) {
+    const hasil = tasks.filter((t) => t.prioritas === prioritas);
+    return res.json(hasil); // array langsung, boleh kosong []
   }
 
-  res.json(mahasiswa);
+  res.json(tasks); // array langsung, tanpa status/message
 });
 
-// GET /mahasiswa/:id -> menampilkan satu data berdasarkan id
-app.get("/mahasiswa/:id", (req, res) => {
+// GET /tasks/:id -> menampilkan satu data berdasarkan id
+app.get("/tasks/:id", (req, res) => {
   const id = parseInt(req.params.id);
-  const data = mahasiswa.find((m) => m.id === id);
+  const data = tasks.find((t) => t.id === id);
 
-  if (!data) return res.status(404).json({ message: "Data tidak ditemukan" });
-  res.json(data);
-});
-
-// POST /mahasiswa
-// Body: { "nama": "Citra", "jurusan": "Sistem Informasi" }
-app.post("/mahasiswa", (req, res) => {
-  const { nama, jurusan } = req.body;
-
-  if (!nama || !jurusan) {
-    return res.status(400).json({ message: "nama dan jurusan wajib diisi" });
+  if (!data) {
+    return res.status(404).json({
+      status: "error",
+      message: `Data dengan id ${id} tidak ditemukan`,
+      data: null,
+    });
   }
 
-  const baru = { id: nextId++, nama, jurusan };
-
-  mahasiswa.push(baru);
-  res.status(201).json(baru);
+  res.json(data); // objek langsung, tanpa status/message
 });
 
-// PUT /mahasiswa/2
-// Body: { "nama": "Budi Santoso", "jurusan": "Informatika" }
-app.put("/mahasiswa/:id", (req, res) => {
+// POST /tasks
+// Body: { "judul": "...", "deskripsi": "...", "prioritas": "tinggi", "tenggat": "2026-10-05", "selesai": false }
+app.post("/tasks", (req, res) => {
+  const { judul, deskripsi, prioritas, tenggat, selesai } = req.body;
+
+  // validasi field wajib: judul, prioritas, tenggat
+  if (!judul || !prioritas || !tenggat) {
+    return res.status(400).json({
+      status: "error",
+      message: "judul, prioritas, dan tenggat wajib diisi",
+      data: null,
+    });
+  }
+
+  const baru = {
+    id: nextId++,
+    judul,
+    deskripsi: deskripsi || "",
+    prioritas,
+    tenggat,
+    selesai: selesai === true,
+  };
+
+  tasks.push(baru);
+
+  // berhasil -> 201 + data yang baru dibuat
+  res.status(201).json({
+    status: "success",
+    message: "Data berhasil ditambahkan",
+    data: baru,
+  });
+});
+
+// PUT /tasks/:id
+// Body: seluruh field wajib (penggantian penuh)
+app.put("/tasks/:id", (req, res) => {
   const id = parseInt(req.params.id);
-  const index = mahasiswa.findIndex((m) => m.id === id);
+  const index = tasks.findIndex((t) => t.id === id);
 
   if (index === -1) {
-    return res.status(404).json({ message: "Data tidak ditemukan" });
+    return res.status(404).json({
+      status: "error",
+      message: `Data dengan id ${id} tidak ditemukan`,
+      data: null,
+    });
   }
 
-  mahasiswa[index] = { ...mahasiswa[index], ...req.body, id };
-  res.json(mahasiswa[index]);
+  const { judul, deskripsi, prioritas, tenggat, selesai } = req.body;
+
+  // validasi field wajib: judul, prioritas, tenggat
+  if (!judul || !prioritas || !tenggat) {
+    return res.status(400).json({
+      status: "error",
+      message: "judul, prioritas, dan tenggat wajib diisi",
+      data: null,
+    });
+  }
+
+  const diperbarui = {
+    id,
+    judul,
+    deskripsi: deskripsi || "",
+    prioritas,
+    tenggat,
+    selesai: selesai === true,
+  };
+
+  tasks[index] = diperbarui;
+
+  res.status(200).json({
+    status: "success",
+    message: `Data tugas dengan id ${id} berhasil diperbarui`,
+    data: diperbarui,
+  });
 });
 
-// DELETE /mahasiswa/2
-app.delete('/mahasiswa/:id', (req, res) => {
+// DELETE /tasks/:id
+app.delete("/tasks/:id", (req, res) => {
   const id = parseInt(req.params.id);
-  const index = mahasiswa.findIndex((m) => m.id === id);
+  const index = tasks.findIndex((t) => t.id === id);
 
   if (index === -1) {
-    return res.status(404).json({ message: 'Data tidak ditemukan' });
+    return res.status(404).json({
+      status: "error",
+      message: `Data dengan id ${id} tidak ditemukan`,
+      data: null,
+    });
   }
 
-  mahasiswa.splice(index, 1);
-  res.status(204).send();
+  tasks.splice(index, 1);
+
+  res.status(200).json({
+    status: "success",
+    message: `Data tugas dengan id ${id} berhasil dihapus`,
+    data: null,
+  });
 });
 
-//Menjalankan aplikasi pada port 3000
-app.listen(PORT, () => {
-  console.log(`Server berjalan di http://localhost:${PORT}`);
+// Middleware catch-all -> menangani route yang tidak terdaftar (harus di paling akhir)
+app.use((req, res) => {
+  res.status(404).json({
+    status: "error",
+    message: "Endpoint tidak ditemukan",
+    data: null,
+  });
 });
+
+// Menjalankan server hanya saat bukan di lingkungan production (Vercel)
+if (process.env.NODE_ENV !== "production") {
+  app.listen(PORT, () => {
+    console.log(`Server berjalan di http://localhost:${PORT}`);
+  });
+}
+
+// Ekspor app agar bisa dijalankan sebagai serverless function di Vercel
+module.exports = app;
